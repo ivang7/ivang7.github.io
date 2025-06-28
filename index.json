@@ -4,11 +4,11 @@
             "name": "VR180 Samples",
             "list": [
                 {
-                    "path": "https://yoursite.com/Example.m3u8",
+                    "path": "http://127.0.0.1:8090/playlistall/all.m3u",
                     "title": " TorrServer",
                     "screenType": " sphere",
                     "stereoMode": "sbs",
-                    "thumbnailUrl": "https://yoursite.com/ExampleTumb.jpg",
+                    "thumbnailUrl": "http://127.0.0.1:8090/icon.png",
                     "is3d": true,
                     "id": "01"
                 }
