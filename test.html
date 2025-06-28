@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>M3U to DeoVR Converter</title>
+    <style>
+        body { font-family: sans-serif; padding: 2em; }
+        #links-container a { display: block; margin-top: 1em; font-size: 1.2em; }
+        #status { color: #555; }
+    </style>
+</head>
+<body>
+
+    <h1>Конвертер плейлиста для DeoVR</h1>
+    <p>Этот скрипт загрузит ваш M3U, обработает вложенные плейлисты и сгенерирует ссылку для DeoVR.</p>
+
+    <button id="load-button">Загрузить и сконвертировать плейлист</button>
+
+    <p id="status"></p>
+    <div id="links-container"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            //const serverAddressInpun = document.getElementById('server-address');
+            const loadButton = document.getElementById('load-button');
+            const statusEl = document.getElementById('status');
+            const linksContainer = document.getElementById('links-container');
+
+            // Функция для парсинга любого M3U-файла
+            function parseM3u(text) {
+                const lines = text.trim().split('\n');
+                const entries = [];
+                for (let i = 0; i < lines.length; i++) {
+                    if (lines[i].startsWith('#EXTINF')) {
+                        const title = lines[i].split(',').slice(1).join(',').trim();
+                        const url = lines[i + 1].trim();
+                        if (title && url) {
+                            entries.push({ title, url });
+                        }
+                    }
+                }
+                return entries;
+            }
+
+            loadButton.addEventListener('click', async () => {
+                statusEl.textContent = 'Загрузка основного плейлиста...';
+                linksContainer.innerHTML = '';
+
+                try {
+                    // 1. Загружаем основной плейлист
+                    const mainPlaylistUrl = 'http://192.168.0.233:8090/playlistall/all.m3u';
+                    const mainResponse = await fetch(mainPlaylistUrl);
+                    if (!mainResponse.ok) throw new Error('Не удалось загрузить основной плейлист. Проверьте CORS на сервере.');
+                    const mainM3uText = await mainResponse.text();
+                    const nestedPlaylists = parseM3u(mainM3uText);
+
+                    statusEl.textContent = `Найдено ${nestedPlaylists.length} вложенных плейлистов. Загружаем...`;
+
+                    // 2. Параллельно загружаем все вложенные плейлисты
+                    const videoPromises = nestedPlaylists.map(async (playlist) => {
+                        //console.log(playlist.url)
+                        const videoResponse = await fetch(playlist.url);
+                        if (!videoResponse.ok) return []; // Пропускаем, если не удалось загрузить
+                        const videoM3uText = await videoResponse.text();
+                        return parseM3u(videoM3uText);
+                    });
+
+                    const allVideoArrays = await Promise.all(videoPromises);
+                    const finalVideoList = allVideoArrays.flat(); // Сводим все видео в один массив
+
+                    statusEl.textContent = `Найдено ${finalVideoList.length} видео. Создание JSON...`;
+
+                    // 3. Формируем DeoVR JSON
+                    const deoVrJson = {
+                        scenes: finalVideoList.map(video => ({
+                            title: video.title,
+                            video_url: video.url,
+                            // Сюда можно добавить и другие параметры DeoVR по желанию
+                        }))
+                    };
+
+                    // 4. Генерируем финальные ссылки
+                    const encodedJson = encodeURIComponent(JSON.stringify(deoVrJson));
+                    const webPlayerUrl = `https://deovr.com/app?video=${encodedJson}`;
+
+                    statusEl.textContent = 'Готово! Используйте ссылки ниже:';
+
+                    const webLink = document.createElement('a');
+                    webLink.href = webPlayerUrl;
+                    webLink.textContent = 'Открыть в веб-плеере DeoVR';
+                    webLink.target = '_blank'; // Открыть в новой вкладке
+
+                    linksContainer.appendChild(webLink);
+
+                } catch (error) {
+                    statusEl.textContent = `Ошибка: ${error.message}`;
+                    console.error(error);
+                }
+            });
+        });
+    </script>
+
+</body>
+</html>
