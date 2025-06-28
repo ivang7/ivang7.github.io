@@ -1,35 +1,101 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-    <title>DeoVR Link</title>
-    <meta charset="utf-8">
+    <meta charset="UTF-8">
+    <title>M3U to DeoVR Converter</title>
+    <style>
+        body { font-family: sans-serif; padding: 2em; }
+        #links-container a { display: block; margin-top: 1em; font-size: 1.2em; }
+        #status { color: #555; }
+    </style>
 </head>
 <body>
 
-    <h1>Запустить сцену в DeoVR</h1>
-    <p>Нажмите на ссылку ниже, чтобы открыть видео в плеере DeoVR.</p>
+    <h1>Конвертер плейлиста для DeoVR</h1>
+    <p>Этот скрипт загрузит ваш M3U, обработает вложенные плейлисты и сгенерирует ссылку для DeoVR.</p>
 
-    <a href="https://deovr.com/app/open?url=https://ivang7.github.io/index.json">
-        Открыть в DeoVR
-    </a>
-    <br />
-   <a href="deovr://https://ivang7.github.io/index.json">
-        Открыть в DeoVR2
-    </a>
-    <br />
-    <a href="deovr://%7B%0A%20%20%22scenes%22%3A%20%5B%0A%20%20%20%20%7B%0A%20%20%20%20%20%20%22title%22%3A%20%22My%20Awesome%20Video%22%2C%0A%20%20%20%20%20%20%22video_url%22%3A%20%22https%3A%2F%2Ffrae-vr.com%2Fwp-content%2Fuploads%2F2021%2F03%2F180-video-for-tutorial.mp4%22%0A%20%20%20%20%7D%0A%20%20%5D%0A%7D">
-        Открыть видео в DeoVR3
-    </a>
-    <br />
-     <a href="deovr://http://192.168.0.233:8090/stream/How%20to%20Train%20Your%20Dragon%20%282010%29%201080p%20BrRip%20x264%20-%201.4GB%20-%20YIFY.m3u?link=864af2c28c24e1d0a598a03d83f15c6a7e6191d7&m3u&fn=file.m3u">
-        Открыть в DeoVR4
-    </a>
-    <br />
-    <a href="deovr://http://127.0.0.1:8090/stream/How.To.Train.Your.Dragon.2010.1080p.BrRip.x264.YIFY.mp4?link=864af2c28c24e1d0a598a03d83f15c6a7e6191d7&index=1&play">
-        Открыть в DeoVR5
-    </a>
-    <br />
+    <button id="load-button">Загрузить и сконвертировать плейлист</button>
 
-    
+    <p id="status"></p>
+    <div id="links-container"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            //const serverAddressInpun = document.getElementById('server-address');
+            const loadButton = document.getElementById('load-button');
+            const statusEl = document.getElementById('status');
+            const linksContainer = document.getElementById('links-container');
+
+            // Функция для парсинга любого M3U-файла
+            function parseM3u(text) {
+                const lines = text.trim().split('\n');
+                const entries = [];
+                let title='',url='';
+                for (let i = 0; i < lines.length; i++) {
+                    if (lines[i].startsWith('#EXTINF')) {
+                        title = lines[i].split(',').slice(1).join(',').trim();
+                    }
+                    if (lines[i].startsWith('http')) {
+                        url = lines[i].trim();
+                    }
+                    if (title && url) {
+                        entries.push({ title, url });
+                        title=url=''
+                    }
+                }
+                return entries;
+            }
+
+            async function loadAndConvertTorrServerPlaylistToDeoVrLinks()
+            {
+                statusEl.textContent = 'Загрузка основного плейлиста...';
+                linksContainer.innerHTML = '';
+
+                try {
+                    // 1. Загружаем основной плейлист
+                    const mainPlaylistUrl = 'http://127.0.0.1:8090/playlistall/all.m3u';
+                    const mainResponse = await fetch(mainPlaylistUrl);
+                    if (!mainResponse.ok) throw new Error('Не удалось загрузить основной плейлист. Проверьте CORS на сервере.');
+                    const mainM3uText = await mainResponse.text();
+                    const nestedPlaylists = parseM3u(mainM3uText);
+
+                    statusEl.textContent = `Найдено ${nestedPlaylists.length} вложенных плейлистов. Загружаем...`;
+
+                    // 2. Параллельно загружаем все вложенные плейлисты
+                    const videoPromises = nestedPlaylists.map(async (playlist) => {
+                        //console.log(playlist.url)
+                        const videoResponse = await fetch(playlist.url);
+                        if (!videoResponse.ok) return []; // Пропускаем, если не удалось загрузить
+                        const videoM3uText = await videoResponse.text();
+                        return parseM3u(videoM3uText);
+                    });
+
+                    const allVideoArrays = await Promise.all(videoPromises);
+                    const finalVideoList = allVideoArrays.flat(); // Сводим все видео в один массив
+
+                    statusEl.textContent = `Найдено ${finalVideoList.length} видео. Создание JSON...`;
+
+                    finalVideoList.forEach(video => {
+                      const webLink = document.createElement('a');
+                      webLink.href = `deovr://${video.url}`;
+                      webLink.textContent = video.title;
+                      webLink.target = '_blank'; // Открыть в новой вкладке
+
+                      linksContainer.appendChild(webLink);
+                    });
+
+                    statusEl.textContent = 'Готово! Используйте ссылки ниже:';
+
+                } catch (error) {
+                    statusEl.textContent = `Ошибка: ${error.message}`;
+                    console.error(error);
+                }
+            }
+
+            await loadAndConvertTorrServerPlaylistToDeoVrLinks();
+            loadButton.addEventListener('click', async () => await loadAndConvertTorrServerPlaylistToDeoVrLinks());
+        });
+    </script>
+
 </body>
 </html>
